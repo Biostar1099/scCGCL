@@ -34,7 +34,7 @@ python preprocess_data.py --input_h5_path="data/deng.h5" --save_h5ad_dir="data" 
 ### 3. Prepare Graph
 
 ```python
-python prepare_graph.py --input_h5ad_path="datadeng_preprocessed.h5ad" ----save_graph_path="./graph"
+python prepare_graph.py --input_h5ad_path="data/deng_preprocessed.h5ad" ----save_graph_path="./graph"
 ```
 
 ### 4. Apply scCGCL
@@ -42,5 +42,6 @@ python prepare_graph.py --input_h5ad_path="datadeng_preprocessed.h5ad" ----save_
 ```python
 python main.py --input_h5ad_path="data/preprocessed/deng_preprocessed.h5ad" --cluster_num 6 --save_graph_path="./graph/knn_graph.txt"
 ```
+
 
 
