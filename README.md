@@ -21,7 +21,10 @@ conda activate sc
 
 ### 1. Collect Dataset.
 
-All data used in this study were obtained from publicly available datasets. Our sample dataset is stored in the directory "deng.h5".
+All data used in this study were obtained from publicly available datasets. Our sample dataset can be accessed through the following link:  
+[Google Drive - Dataset](https://drive.google.com/drive/folders/1S4AsPQp-h8wQruj60tfbglCUYvinZFVC?usp=drive_link)
+
+
 
 ### 2. Generate Preprocessed H5AD File.
 
