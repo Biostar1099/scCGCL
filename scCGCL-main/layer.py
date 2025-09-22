@@ -57,12 +57,13 @@ class GCN(nn.Module):
 
 
 def loss_infomax_new(x, x_cl, edge_index, T: float = 0.1):
-    """对角为正样本；掩掉 self 与一阶邻接对作为负样本。"""
+    
     N = x.size(0)
     device = x.device
     x_norm = F.normalize(x, dim=1)
     x_cl_norm = F.normalize(x_cl, dim=1)
     sim = torch.exp(torch.mm(x_norm, x_cl_norm.t()) / T)  # [N,N]
+    sim_1=torch.exp(torch.mm(x_norm, x_norm.t()) / T)
     pos = sim.diag()
 
     mask = torch.ones_like(sim, dtype=torch.bool, device=device)
@@ -72,6 +73,14 @@ def loss_infomax_new(x, x_cl, edge_index, T: float = 0.1):
         src, dst = edge_index
         mask[src, dst] = False
         mask[dst, src] = False
+    mask_1=torch.ones_like(sim_1, dtype=torch.bool, device=device)
+    idx_1 = torch.arange(N, device=device)
+    mask_1[idx_1, idx_1] = False
+    if edge_index.numel() > 0:
+        src, dst = edge_index
+        mask_1[src, dst] = False
+        mask_1[dst, src] = False
     neg_sum = (sim * mask.float()).sum(dim=1)
-    loss = -torch.log(pos / (pos + neg_sum)).mean()
+    neg_sum_1=(sim_1 * mask_1.float()).sum(dim=1)
+    loss = -torch.log(pos / (pos + neg_sum+neg_sum_1)).mean()
     return loss
