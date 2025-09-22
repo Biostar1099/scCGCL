@@ -9,7 +9,7 @@ from scipy.sparse import coo_matrix
 import os
 import numpy as np
 import scipy.sparse as sp
-from scipy.sparse.linalg import eigsh   # 更稳地取最小特征值
+from scipy.sparse.linalg import eigsh   
 from sklearn.preprocessing import StandardScaler
 
 import torch.nn as nn
@@ -111,13 +111,13 @@ def load_graph(edge_path):
         edgelist = [(int(item.split()[0]), int(item.split()[1])) for item in edge_file.readlines()]
     return edgelist
 
-#聚类相关的
+
 def compute_metrics(y_true, y_pred):
     metrics = {}
     metrics["ARI"] = ARI(y_true, y_pred)
     metrics["NMI"] = NMI(y_true, y_pred)
     return metrics
-#聚类
+
 def cluster(embedding, gt_labels, num_cluster,cluster_name= 'kmeans',seed=42):
     if torch.is_tensor(embedding):#新加的这两行
         embedding = embedding.detach().cpu().numpy()
@@ -146,42 +146,30 @@ def cluster(embedding, gt_labels, num_cluster,cluster_name= 'kmeans',seed=42):
         max_tuple = max(ari_dict, key=lambda x: ari_dict[x]['ARI'])
         return ari_dict[max_tuple], hdbscan_dict[max_tuple]
 
-#为谱聚类服务的函数
 def cal_centrality(X, labels):
-    """
-    计算每个簇（label）内部所有节点的向量范数。
-    :param X: 输入的all特征
-    :param labels: 预测的label还是真实的label？不知道
-    :return:
-    """
+
     centrality_scores = [
         torch.norm(X[labels == label], dim=1) if (labels == label).any() else 0
         for label in torch.unique(labels)
     ]
     return centrality_scores
-#谱聚类
+
 def spec_clustering(adj_csr, k, batch_size=100):
-    """
-    谱聚类
-    :param adj_csr: 稀疏表示的邻接矩阵
-    :param k: 簇的个数
-    :param batch_size:
-    :return:
-    """
+
     degree_matrix = sp.diags(np.array(adj_csr.sum(axis=1)).flatten())  # 度矩阵，也没用上啊
     norm_laplacian = sp.csgraph.laplacian(adj_csr, normed=True)  # 标准化后的拉普拉斯矩阵
 
-    # 这里用 scipy.sparse.linalg.svds 来近似求拉普拉斯矩阵的 前 k 个最小特征值及其对应的特征向量。
+   
     u, s, vt = svds(norm_laplacian, k=k)
     eigvals = s[::-1]
     eigvecs = u[:, ::-1]
     # eigvals and eigvecs should be returned
 
-    X = torch.tensor(eigvecs[:, :k], dtype=torch.float32)  # 提取前K个特征向量
+    X = torch.tensor(eigvecs[:, :k], dtype=torch.float32)
     scaler = StandardScaler()  # 归一化
     X_scaled = scaler.fit_transform(X.numpy())
 
-    # 做小批量的kmeans
+ 
     #minibatch_kmeans = MiniBatchKMeans(n_clusters=k, batch_size=batch_size, random_state=42, n_init=10)
     minibatch_kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
     labels = minibatch_kmeans.fit_predict(X_scaled)
@@ -204,39 +192,30 @@ def spec_clustering(adj_csr, k, batch_size=100):
     return torch.tensor(centers, dtype=torch.int64)  # ，返回的是个索引列表！！返回所有簇中心的节点索引的张量。
 
 def spec_clustering_new(adj_csr, k, feature_matrix, N, batch_size=100):
-    """
-    谱聚类
-    :param adj_csr: 稀疏表示的邻接矩阵
-    :param k: 簇的个数
-    :param feature_matrix: 原始特征矩阵 (cells x genes)
-    :param N: 每个簇选取的中心节点数量
-    :param batch_size: KMeans批次大小
-    :return: 所选节点的特征矩阵 (N*k x genes) 和对应的节点索引
-    """
-    # 计算拉普拉斯矩阵并获取特征向量
-    # 确保feature_matrix是Tensor格式
+
+
     if not isinstance(feature_matrix, torch.Tensor):
         feature_matrix = torch.tensor(
             feature_matrix.toarray() if hasattr(feature_matrix, 'toarray') else feature_matrix,
             dtype=torch.float32)
 
-    # 计算拉普拉斯矩阵并获取特征向量
+
     norm_laplacian = sp.csgraph.laplacian(adj_csr, normed=True)
     u, s, vt = svds(norm_laplacian, k=k)
     eigvals = s[::-1]
     eigvecs = u[:, ::-1]
 
-    # 准备KMeans输入
+
     X = torch.tensor(eigvecs[:, :k], dtype=torch.float32)
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X.numpy())
 
-    # 聚类得到标签
+   
     minibatch_kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
     labels = minibatch_kmeans.fit_predict(X_scaled)
     labels = torch.tensor(labels, dtype=torch.int64)
 
-    # 计算每个簇的中心性分数
+   
     centrality_scores = cal_centrality(X, labels)
 
     selected_indices = []
@@ -248,24 +227,24 @@ def spec_clustering_new(adj_csr, k, feature_matrix, N, batch_size=100):
         if len(cluster_indices) == 0:
             continue
 
-        # 获取当前簇的中心性分数
+
         cluster_centrality = centrality_scores[label.item()]
 
-        # 按照中心性分数降序排列
+      
         sorted_idx = torch.argsort(cluster_centrality, descending=True)
         top_n_indices = sorted_idx[:min(N, len(sorted_idx))]
 
-        # 获取节点索引和原始特征
+      
         cluster_node_indices = cluster_indices[top_n_indices]
 
-        # 直接提取原始特征矩阵中的特征行
+    
         cluster_features = feature_matrix[cluster_node_indices]
 
-        # 按中心性分数降序存储
+
         selected_indices.append(cluster_node_indices)
         selected_features.append(cluster_features)
 
-    # 合并所有结果
+
     if selected_indices:
         all_indices = torch.cat(selected_indices)
         all_features = torch.cat(selected_features, dim=0)
@@ -295,20 +274,20 @@ def parse_arguments():
     return parser.parse_args()
 def main():
     args=parse_arguments()
-# --------------- 参数 -----------------
+
     h5ad_data_file = args.input_h5ad_path
     args_graph_type = args.graph_type
     args_KNNs_K = args.k
 
-# ---------- 1 选设备 ----------
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device)
 
-# ---------- 2 读数据 ----------
+
     processed_adata = sc.read_h5ad(h5ad_data_file)
     num_nodes, num_gene = processed_adata.shape
 
-# ---------- 3 构图 ----------
+
     edgelist = prepare_graphs(
     processed_adata,
     dataset_name='muraro',
@@ -320,4 +299,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
