@@ -55,7 +55,7 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
-    # -------- 参数 --------
+  
     h5ad_data_file = args.input_h5ad_path
     graph_txt = args.save_graph_path  # 若没有可用 prepare_graphs 生成
 
@@ -70,12 +70,12 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device)
 
-    # -------- 读数据 & 全局图 --------
+
     processed_adata = sc.read_h5ad(h5ad_data_file)
     num_nodes, num_gene = processed_adata.shape
     processed_adata.X = processed_adata.X.astype(np.float32)
 
-    # 读或建图
+   
     if os.path.exists(graph_txt):
         edgelist = load_graph(graph_txt)
     #else:
@@ -87,43 +87,43 @@ def main():
     x_global = torch.tensor(processed_adata.X, dtype=torch.float32)
     global_graph = Data(x=x_global, edge_index=edge_index_global)
 
-    # 稀疏邻接用于谱聚类
+  
     adj_sp = coo_matrix(
         (np.ones(edge_index_global.shape[1]),
          (edge_index_global.cpu().numpy()[0], edge_index_global.cpu().numpy()[1])),
         shape=(num_nodes, num_nodes)
     ).tocsr()
 
-    # -------- 谱聚类：每簇选 Top-N 核心节点（全局索引） --------
+
     core_indices_all, core_indices_per_cluster, core_features = select_topN_per_cluster(
         adj_sp, k=args_cluster_num, feature_matrix=processed_adata.X, N=10
     )
-    assert len(core_indices_all) > 0, "未选出任何核心节点，检查参数 N/K 或谱分解。"
+    assert len(core_indices_all) > 0,
 
-    # -------- 构建边：核心完全图 + 与核心相接的一阶邻居 --------
+
     core_edges_complete = complete_graph_edges_for_clusters(core_indices_per_cluster)
     core_set = set(core_indices_all.cpu().numpy().tolist())
     touch_edges, neighbor_set = edges_touching_core_from_global(edge_index_global, core_set)
 
-    # 合并边（使用 set 去重）
+   
     all_pairs = list({(int(u), int(v)) for (u, v) in (core_edges_complete + touch_edges)})
 
-    # -------- 重编号：核心在前，邻居在后 --------
+
     sub_edge_index, new_node_order, core_new_index, mapping = reindex_subgraph(
         core_indices_all, neighbor_set, all_pairs
     )
 
-    # 用于 loss 的核心边（完全图；仅核心节点的新索引）
+    
     core_loss_edges = build_core_loss_edges(core_indices_per_cluster, mapping)
 
-    # -------- 子图特征（按 new_node_order 提取），发送到设备 --------
+  
     new_node_order_tensor = torch.tensor(new_node_order, dtype=torch.long)
     x_sub = x_global[new_node_order_tensor].to(device)
     sub_edge_index = sub_edge_index.to(device)
     core_loss_edges = core_loss_edges.to(device)
     core_new_index = core_new_index.to(device)
 
-    # -------- 模型 --------
+    
     model = GATEncoder(num_genes=num_gene, latent_dim=args_latent_dim).to(device)
     # model = GCN(num_features=num_gene, output_dim=args_latent_dim).to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
@@ -137,14 +137,14 @@ def main():
 
     for epoch in range(args_epochs):
         model.train()
-        # 数据增强：仅对子图节点做（邻居用于消息传递，loss 只计算核心）
+        
         noise = torch.normal(0, torch.ones_like(x_sub, device=device) * 0.01)
         aug = x_sub + F.normalize(noise, dim=1)
 
         z_aug = model(aug, sub_edge_index)
         z = model(x_sub, sub_edge_index)
 
-        # 仅在 **核心节点** 上计算对比损失
+       
         z_core = z[core_new_index]
         z_aug_core = z_aug[core_new_index]
         loss = 0.5 * (loss_infomax_new(z_core, z_aug_core, core_loss_edges) +
@@ -167,10 +167,9 @@ def main():
     elapsed = time.perf_counter() - start_time
     mem_after = process.memory_info().rss
     print('Best ARI, NMI:', best_ari, best_nmi)
-    print(f"运行时间: {elapsed:.6f}秒")
-    print(f"内存使用: {(mem_after - mem_before) / (1024 ** 2):.2f} MB")
+    print(f"time: {elapsed:.6f}秒")
+    
 
-    # 释放显存/内存
     del z, z_aug, z_core, z_aug_core
     torch.cuda.empty_cache() if torch.cuda.is_available() else None
     gc.collect()
@@ -178,3 +177,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
