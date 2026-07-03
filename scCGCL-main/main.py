@@ -33,16 +33,7 @@ def to_int_list(x):
 
 
 def build_disjoint_core_neighbor_edges(edge_index_global, core_indices_per_cluster):
-    """
-    Build mutually exclusive cluster-specific subgraphs.
 
-    Rule:
-    1. Core cells are fixed to their own preliminary cluster.
-    2. First-order neighbors are assigned to only one cluster.
-       If a neighbor touches cores from multiple clusters, assign it to the cluster
-       with the largest number of core-neighbor connections.
-    3. Only edges within the same assigned cluster-specific subgraph are kept.
-    """
 
     edge_np = edge_index_global.detach().cpu().numpy()
     num_nodes = int(edge_np.max()) + 1
