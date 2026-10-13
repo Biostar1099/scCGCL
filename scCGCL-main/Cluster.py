@@ -9,7 +9,7 @@ import scanpy as sc
 import scipy.sparse as sp
 from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import svds
-
+import hdbscan
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -49,6 +49,22 @@ def cluster(embedding, gt_labels, num_cluster, cluster_name='kmeans', seed=42):
         pd_labels = KMeans(n_clusters=num_cluster, random_state=seed).fit(embedding).labels_
         eval_supervised_metrics = compute_metrics(gt_labels, pd_labels)
         return eval_supervised_metrics, pd_labels
+    elif cluster_name == 'hdbscan':
+        min_cluster_size=5
+        clusterer = hdbscan.HDBSCAN(
+            min_cluster_size=min_cluster_size,
+            min_samples=None,
+            metric='euclidean',
+            cluster_selection_method='eom'
+        )
+        pred_labels = clusterer.fit_predict(embedding)
+
+        # -1代表噪声细胞，计算指标时过滤噪声
+        mask = pred_labels != -1
+        clean_pred = pred_labels[mask]
+        clean_true = gt_labels[mask]
+
+        return {"ARI": ARI(clean_true, clean_pred), "NMI": NMI(clean_true, clean_pred)},pred_labels
     else:
         raise NotImplementedError("")
 
@@ -185,7 +201,12 @@ def build_core_loss_edges(core_indices_per_cluster, mapping):
 
     loss_pairs = []
     for core_idx in core_indices_per_cluster:
-        arr = [mapping[int(x)] for x in core_idx.cpu().numpy().tolist() if int(x) in mapping]
+        # 兼容 core_idx 是 tensor 或者 python list
+        if torch.is_tensor(core_idx):
+            core_list = core_idx.cpu().numpy().tolist()
+        else:
+            core_list = core_idx
+        arr = [mapping[int(x)] for x in core_list if int(x) in mapping]
         L = len(arr)
         for i in range(L):
             u = arr[i]
