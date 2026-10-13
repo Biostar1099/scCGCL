@@ -40,7 +40,7 @@ python prepare_graph.py --input_h5ad_path="data/deng_preprocessed.h5ad" ----save
 ### 4. Apply scCGCL
 
 ```python
-python main.py --input_h5ad_path="data/preprocessed/deng_preprocessed.h5ad" --cluster_num 6 --save_graph_path="./graph/knn_graph.txt"
+python main.py --input_h5ad_path="data/preprocessed/deng_preprocessed.h5ad" --save_graph_path="./graph/deng_preprocessed_10_PKNN.txt"
 ```
 
 
