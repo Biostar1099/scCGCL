@@ -23,7 +23,7 @@ from torch_geometric.nn import GATConv, GCNConv
 from torch_geometric.utils import to_undirected, add_self_loops
 
 from layer import GATEncoder, loss_infomax_new
-from prepare_graph import load_graph  # 修正拼写：perpare -> prepare
+from prepare_graph import load_graph  
 
 from Cluster import (
     cluster,
